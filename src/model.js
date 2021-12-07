@@ -133,8 +133,7 @@ Model.prototype.getData = function (req, callback) {
             "title": 'Koop Arches Provider',
             "geometryType": geometryType,
             "idField": 'OBJECTID',
-            "fields": fieldset,
-            "outSR": { "wkid": 4326, "latestWkid": 4326 }
+            "fields": fieldset
         }
     }
     
@@ -167,6 +166,7 @@ Model.prototype.getData = function (req, callback) {
                         feature.properties.OBJECTID = feature.properties.id;
                         delete feature.properties.id;
                         feature_service_obj.features.push(feature);
+
                     });
                 } catch (error) {
                     
