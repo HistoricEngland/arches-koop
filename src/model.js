@@ -45,11 +45,15 @@ Model.prototype.getData = function (req, callback) {
     const outfields = query.outFields || ""
     const limit = query.resultRecordCount || null
     const objectIds = query.objectIds || null
+    const maxAllowableOffset = query.maxAllowableOffset || -1
+    const geometryPrecision = query.geometryPrecision || 6
+    const inSR = query.geometry?.spatialReference?.wkid || 4326
+    const outSR = query.outSR?.wkid || 4326
 
     if (limit){
         qs.limit = limit;
     }
-
+    
     if (outfields == "OBJECTID"){
         qs.nodegroups = ""
     }
@@ -58,27 +62,21 @@ Model.prototype.getData = function (req, callback) {
         qs.objectids = objectIds
     }
 
+    let geometryFilter = false
     if (query.geometry){
-        qs.method = 'bbox'
         if (query.geometryType == "esriGeometryEnvelope"){
-           qs.xmin = query.geometry.xmin
-           qs.ymin = query.geometry.ymin
-           qs.xmax = query.geometry.xmax
-           qs.ymax = query.geometry.ymax
-           qs.in_srid = query.geometry.spatialReference.wkid
-        }
-        else{
-            qs.geometryTypeTest = query.geometryType
-        }
-    }
-    else{
-        if(method == 'query'){
-            qs.method == "query_no_bbox";
+            geometryFilter = true
+            qs.xmin = query.geometry.xmin
+            qs.ymin = query.geometry.ymin
+            qs.xmax = query.geometry.xmax
+            qs.ymax = query.geometry.ymax
+            qs.in_srid = inSR
         }
     }
 
-    qs.precision = 6
-    qs.simplify = true
+    qs.precision = geometryPrecision
+    qs.simplify = maxAllowableOffset
+    qs.outSR = outSR
 
     let propertyMap = {}
     if (qs.properties) {
@@ -136,7 +134,9 @@ Model.prototype.getData = function (req, callback) {
             "fields": fieldset
         }
     }
+
     
+
 
     switch (method){
         case "query":
@@ -146,6 +146,16 @@ Model.prototype.getData = function (req, callback) {
             }, (err, res, geojson) => {
                 if (err) return callback(err);
                 try {
+
+                    feature_service_obj.filtersApplied = {
+                        all: false, // true if all post processing should be skipped
+                        geometry: geometryFilter, // true if a geometric filter has already been applied to the data
+                        where: true, // true if a sql-like where filter has already been applied to the data
+                        //offset: Boolean // true if the result offset has already been applied to the data,
+                        //limit: Boolean // true if the result count has already been limited,
+                        projection: true // true if the result data has already been projected
+                    }
+
                     geojson.features.forEach(function (feature) {
                         if (qs.nodeid) feature.properties.nodeid = qs.nodeid;
             
