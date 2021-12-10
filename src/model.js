@@ -16,21 +16,27 @@ function Model(koop) { }
 
 Model.prototype.createKey = function (req) {
     const query = req.query
+    params = []
 
-    const layerName = req.params.id
-    const host = req.params.host
-    const method = req.params.method || "none"
-    
-    const objectIds = query.objectIds || "none"
-    const outFields = query.outFields || "none"
-    const xmin = query.geometry?.xmin || "none"
-    const ymin = query.geometry?.ymin || "none"
-    const xmax = query.geometry?.xmax || "none"
-    const ymax = query.geometry?.ymax || "none"
-    const in_srid = query.geometry?.spatialReference?.wkid || "none"
-    const limit = query.resultRecordCount || "none"
-    const geometryType = query.geometryType || "none"
-    key = `${host}::${layerName}::${method}::${objectIds}::${outFields}::${xmin}::${ymin}::${xmax}::${ymax}::${in_srid}::${limit}::${geometryType}`
+    params.push(req.params.id || "none")
+    params.push(req.params.host|| "none")
+    params.push(req.params.method || "none")
+    params.push(query.outFields || "none")
+    params.push(query.geometry?.xmin || "none")
+    params.push(query.geometry?.ymin || "none")
+    params.push(query.geometry?.xmax || "none")
+    params.push(query.geometry?.ymax || "none")
+    params.push(query.geometry?.spatialReference?.wkid || "none")
+    params.push(query.resultRecordCount || "none")
+    params.push(query.geometryType || "none")
+    params.push(query.maxAllowableOffset || "none")
+    params.push(query.geometryPrecision || "none")
+    params.push(query.outSR?.latestWkid || query.outSR?.wkid ||  query.outSR || "none")
+    params.push(query.returnGeometry || true)
+    params.push(query.returnCountOnly || false)
+    params.push(query.resultOffset || "none")
+
+    key = params.join("::")
     console.log(key)
     return key
 }
@@ -48,19 +54,25 @@ Model.prototype.getData = function (req, callback) {
     const maxAllowableOffset = query.maxAllowableOffset || -1
     const geometryPrecision = query.geometryPrecision || 6
     const inSR = query.geometry?.spatialReference?.wkid || 4326
-    const outSR = query.outSR?.wkid || 4326
-
-    if (limit){
-        qs.limit = limit;
-    }
+    const outSR = query.outSR?.latestWkid || query.outSR?.wkid ||  query.outSR || 4326
+    const returnCountOnly = query.returnCountOnly || false
+    const returnGeometry = query.returnGeometry || !returnCountOnly
     
-    if (outfields == "OBJECTID"){
-        qs.nodegroups = ""
+    qs.source = "koop"
+
+    let hasOffSet = false
+    if (query.resultOffset){
+        qs.offset = query.resultOffset
+        hasOffSet = true
+    } 
+    else { 
+        qs.offset = -1
     }
 
-    if (objectIds){
-        qs.objectids = objectIds
-    }
+    if (limit) qs.limit = limit;
+
+    if (outfields == "OBJECTID") qs.nodegroups = "";
+    if (objectIds) qs.objectids = objectIds;
 
     let geometryFilter = false
     if (query.geometry){
@@ -77,7 +89,9 @@ Model.prototype.getData = function (req, callback) {
     qs.precision = geometryPrecision
     qs.simplify = maxAllowableOffset
     qs.outSR = outSR
-
+    qs.returnGeometry = returnGeometry
+    qs.returnCountOnly = returnCountOnly
+    
     let propertyMap = {}
     if (qs.properties) {
         propertyMap = qs.properties
@@ -124,7 +138,7 @@ Model.prototype.getData = function (req, callback) {
     feature_service_obj = {
         "type":"FeatureCollection",
         "features": [],
-        "ttl": config.cacheTimeout,
+        //"ttl": config.cacheTimeout,
         "metadata" : {
             "name": layerName,
             "displayField": qs.displayField,
@@ -150,9 +164,9 @@ Model.prototype.getData = function (req, callback) {
                     feature_service_obj.filtersApplied = {
                         all: false, // true if all post processing should be skipped
                         geometry: geometryFilter, // true if a geometric filter has already been applied to the data
-                        where: true, // true if a sql-like where filter has already been applied to the data
-                        //offset: Boolean // true if the result offset has already been applied to the data,
-                        //limit: Boolean // true if the result count has already been limited,
+                        where: false, // true if a sql-like where filter has already been applied to the data
+                        offset: hasOffSet, // true if the result offset has already been applied to the data,
+                        limit: (limit !== null), // true if the result count has already been limited,
                         projection: true // true if the result data has already been projected
                     }
 
@@ -178,6 +192,7 @@ Model.prototype.getData = function (req, callback) {
                         feature_service_obj.features.push(feature);
 
                     });
+
                 } catch (error) {
                     
                 }
